@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NASA Near-Earth Object Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --surface2: #1a2236;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --success: #10b981;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --border: #1e2d45;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0a0e1a 0%, #0f1f3d 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo { font-size: 2rem; }
+    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.5px; }
+    header p { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+
+    #key-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 90px);
+      padding: 32px;
+    }
+    .key-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .key-card .icon { font-size: 3rem; margin-bottom: 16px; }
+    .key-card h2 { font-size: 1.4rem; margin-bottom: 8px; }
+    .key-card p { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; line-height: 1.6; }
+    .key-card a { color: var(--accent); }
+    .input-row { display: flex; gap: 8px; }
+    .input-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 0.9rem;
+    }
+    .input-row input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .btn {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 20px;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn.danger { background: var(--danger); }
+    .btn.outline {
+      background: transparent;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .btn.outline:hover { background: var(--accent); color: #fff; }
+    #key-error { color: var(--danger); font-size: 0.85rem; margin-top: 10px; display: none; }
+
+    #dashboard { display: none; padding: 24px 32px; }
+
+    .controls-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .controls-bar label { color: var(--muted); font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .controls-bar input[type="date"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 0.9rem;
+    }
+    .controls-bar input[type="date"]:focus { outline: 2px solid var(--accent); }
+    .controls-bar .spacer { flex: 1; }
+    #change-key-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 6px 12px;
+    }
+    #change-key-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    #error-banner {
+      background: rgba(239,68,68,0.12);
+      border: 1px solid var(--danger);
+      border-radius: 10px;
+      color: var(--danger);
+      display: none;
+      font-size: 0.9rem;
+      margin-bottom: 20px;
+      padding: 14px 18px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi-card.blue::before { background: var(--accent); }
+    .kpi-card.red::before { background: var(--danger); }
+    .kpi-card.yellow::before { background: var(--warning); }
+    .kpi-card.green::before { background: var(--success); }
+    .kpi-label { color: var(--muted); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .kpi-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .kpi-sub { color: var(--muted); font-size: 0.78rem; margin-top: 4px; }
+    .kpi-card.red .kpi-value { color: var(--danger); }
+    .kpi-card.yellow .kpi-value { color: var(--warning); }
+    .kpi-card.green .kpi-value { color: var(--success); }
+    .kpi-card.blue .kpi-value { color: var(--accent); }
+
+    /* MAP */
+    .map-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .map-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .map-card .map-subtitle { color: var(--muted); font-size: 0.8rem; margin-bottom: 4px; }
+    .map-disclaimer {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 8px;
+      color: var(--warning);
+      font-size: 0.78rem;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.5;
+    }
+    .map-disclaimer .disclaimer-icon { font-size: 0.9rem; flex-shrink: 0; margin-top: 1px; }
+    .map-legend {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .map-legend span { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .legend-dot.red { background: #ef4444; }
+    .legend-dot.blue { background: #3b82f6; }
+    #neo-map { height: 460px; border-radius: 10px; border: 1px solid var(--border); }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .chart-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+    .chart-wrapper { position: relative; height: 260px; }
+    .chart-card.wide { grid-column: span 2; }
+    @media (max-width: 900px) { .chart-card.wide { grid-column: span 1; } }
+
+    /* TABLE */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .table-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .table-header h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .table-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+    .table-controls input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 7px 12px;
+      font-size: 0.85rem;
+    }
+    .table-controls input::placeholder { color: var(--muted); }
+    .table-controls input:focus { outline: 2px solid var(--accent); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    thead th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 10px 12px;
+      text-align: left;
+      text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    thead th:hover { color: var(--text); }
+    thead th.sort-asc::after { content: ' ↑'; }
+    thead th.sort-desc::after { content: ' ↓'; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 10px 12px; }
+    .badge {
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      text-transform: uppercase;
+    }
+    .badge.hazardous { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .badge.safe { background: rgba(16,185,129,0.15); color: var(--success); }
+
+    .loading {
+      align-items: center;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      justify-content: center;
+      min-height: 200px;
+    }
+    .spinner {
+      animation: spin 1s linear infinite;
+      border: 3px solid var(--border);
+      border-radius: 50%;
+      border-top-color: var(--accent);
+      height: 40px;
+      width: 40px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo">☄️</span>
+  <div>
+    <h1>NASA Near-Earth Object Tracker</h1>
+    <p>Real-time asteroid data from NASA's NeoWs API</p>
+  </div>
+</header>
+
+<!-- KEY SCREEN -->
+<div id="key-screen">
+  <div class="key-card">
+    <div class="icon">🔑</div>
+    <h2>Enter Your NASA API Key</h2>
+    <p>Get a free key at <a href="https://api.nasa.gov" target="_blank">api.nasa.gov</a>. Your key is stored only in memory and never saved or transmitted anywhere other than NASA's servers.</p>
+    <div class="input-row">
+      <input type="text" id="api-key-input" placeholder="Paste your NASA API key…" />
+      <button class="btn" onclick="startDashboard()">Launch</button>
+    </div>
+    <div id="key-error">Invalid or missing API key. Please try again.</div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+
+  <!-- Controls -->
+  <div class="controls-bar">
+    <label>Start Date</label>
+    <input type="date" id="start-date" />
+    <label>End Date</label>
+    <input type="date" id="end-date" />
+    <button class="btn" onclick="fetchNEOs()">Fetch Asteroids</button>
+    <div class="spacer"></div>
+    <button id="change-key-btn" onclick="changeKey()">Change API Key</button>
+  </div>
+
+  <div id="error-banner"></div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card blue">
+      <div class="kpi-label">Total NEOs</div>
+      <div class="kpi-value" id="kpi-total">—</div>
+      <div class="kpi-sub">in selected date range</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Potentially Hazardous</div>
+      <div class="kpi-value" id="kpi-hazardous">—</div>
+      <div class="kpi-sub">flagged by NASA</div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Largest Diameter</div>
+      <div class="kpi-value" id="kpi-largest">—</div>
+      <div class="kpi-sub" id="kpi-largest-name">estimated max, km</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Fastest Velocity</div>
+      <div class="kpi-value" id="kpi-fastest">—</div>
+      <div class="kpi-sub" id="kpi-fastest-name">km/s</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Closest Approach</div>
+      <div class="kpi-value" id="kpi-closest">—</div>
+      <div class="kpi-sub" id="kpi-closest-name">lunar distances</div>
+    </div>
+  </div>
+
+  <!-- MAP (focal point) -->
+  <div class="map-card">
+    <h3>🌍 Closest Approach Locations</h3>
+    <p class="map-subtitle">Each marker shows where on Earth an asteroid will make its closest pass. Click a marker for details.</p>
+    <div class="map-disclaimer">
+      <span class="disclaimer-icon">⚠️</span>
+      <span><strong>Note on marker size:</strong> Marker sizes on this map are scaled relative to each asteroid's estimated diameter compared to others in the current dataset — they do <em>not</em> represent the literal physical size of the NEO, and their position does not indicate a predicted impact point. All NEOs in this dataset safely pass Earth.</span>
+    </div>
+    <div class="map-legend">
+      <span><span class="legend-dot red"></span> Potentially Hazardous</span>
+      <span><span class="legend-dot blue"></span> Non-Hazardous</span>
+      <span style="margin-left:auto; font-size:0.75rem;">Marker size = relative estimated diameter</span>
+    </div>
+    <div id="neo-map"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>Top 10 — Estimated Max Diameter (km)</h3>
+      <div class="chart-wrapper"><canvas id="chart-diameter"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Top 10 — Miss Distance (Lunar Distances)</h3>
+      <div class="chart-wrapper"><canvas id="chart-distance"></canvas></div>
+    </div>
+    <div class="chart-card wide">
+      <h3>Top 10 — Relative Velocity (km/s)</h3>
+      <div class="chart-wrapper"><canvas id="chart-velocity"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-header">
+      <h3>All Near-Earth Objects</h3>
+      <div class="table-controls">
+        <input type="text" id="search-input" placeholder="Search by name…" oninput="renderTable()" />
+        <button class="btn outline" id="hazard-toggle" onclick="toggleHazard()">Show Hazardous Only</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortTable('name')">Name</th>
+            <th onclick="sortTable('date')">Date</th>
+            <th onclick="sortTable('diameter')">Diameter (km)</th>
+            <th onclick="sortTable('velocity')">Velocity (km/s)</th>
+            <th onclick="sortTable('distance')">Miss Distance (LD)</th>
+            <th onclick="sortTable('hazardous')">Hazardous</th>
+          </tr>
+        </thead>
+        <tbody id="neo-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let apiKey = '';
+  let allNEOs = [];
+  let showHazardousOnly = false;
+  let sortKey = 'date';
+  let sortDir = 1;
+  let map = null;
+  let markersLayer = null;
+  let charts = {};
+
+  function startDashboard() {
+    const input = document.getElementById('api-key-input').value.trim();
+    if (!input) {
+      document.getElementById('key-error').style.display = 'block';
+      return;
+    }
+    apiKey = input;
+    document.getElementById('key-screen').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    setDefaultDates();
+    initMap();
+    fetchNEOs();
+  }
+
+  function changeKey() {
+    document.getElementById('key-screen').style.display = 'flex';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('api-key-input').value = '';
+  }
+
+  function setDefaultDates() {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 6);
+    document.getElementById('start-date').value = start.toISOString().split('T')[0];
+    document.getElementById('end-date').value = end.toISOString().split('T')[0];
+  }
+
+  function initMap() {
+    if (map) return;
+    map = L.map('neo-map').setView([20, 0], 2);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles © Esri',
+      maxZoom: 18
+    }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
+  }
+
+  async function fetchNEOs() {
+    const start = document.getElementById('start-date').value;
+    const end = document.getElementById('end-date').value;
+    const banner = document.getElementById('error-banner');
+    banner.style.display = 'none';
+
+    if (!start || !end) { showError('Please select both a start and end date.'); return; }
+
+    const startD = new Date(start), endD = new Date(end);
+    const diffDays = (endD - startD) / (1000 * 60 * 60 * 24);
+    if (diffDays < 0) { showError('End date must be after start date.'); return; }
+    if (diffDays > 7) { showError('NASA\'s API allows a maximum range of 7 days. Please adjust your dates.'); return; }
+
+    try {
+      const url = `https://api.nasa.gov/neo/rest/v1/feed?start_date=${start}&end_date=${end}&api_key=${apiKey}`;
+      const res = await fetch(url);
+      if (res.status === 403 || res.status === 401) { showError('Invalid API key. Please check your key and try again.'); return; }
+      if (res.status === 429) { showError('Rate limit exceeded. Please wait a moment and try again.'); return; }
+      if (!res.ok) { showError(`API error: ${res.status} ${res.statusText}`); return; }
+
+      const data = await res.json();
+      allNEOs = parseNEOs(data);
+      updateDashboard();
+    } catch (e) {
+      showError('Network error: Could not reach NASA\'s API. Check your internet connection and try again.');
+    }
+  }
+
+  function parseNEOs(data) {
+    const neos = [];
+    for (const date in data.near_earth_objects) {
+      for (const neo of data.near_earth_objects[date]) {
+        const ca = neo.close_approach_data[0];
+        neos.push({
+          name: neo.name.replace(/[()]/g, '').trim(),
+          date: ca?.close_approach_date || date,
+          diameter: +((neo.estimated_diameter.kilometers.estimated_diameter_max + neo.estimated_diameter.kilometers.estimated_diameter_min) / 2).toFixed(4),
+          diameterMax: +(neo.estimated_diameter.kilometers.estimated_diameter_max).toFixed(4),
+          velocity: +(+ca?.relative_velocity.kilometers_per_second).toFixed(3),
+          distance: +(+ca?.miss_distance.lunar).toFixed(2),
+          hazardous: neo.is_potentially_hazardous_asteroid,
+          id: neo.id
+        });
+      }
+    }
+    return neos;
+  }
+
+  function updateDashboard() {
+    updateKPIs();
+    updateMap();
+    updateCharts();
+    renderTable();
+  }
+
+  function updateKPIs() {
+    const total = allNEOs.length;
+    const hazCount = allNEOs.filter(n => n.hazardous).length;
+    const largest = allNEOs.reduce((a, b) => b.diameterMax > a.diameterMax ? b : a, allNEOs[0]);
+    const fastest = allNEOs.reduce((a, b) => b.velocity > a.velocity ? b : a, allNEOs[0]);
+    const closest = allNEOs.reduce((a, b) => b.distance < a.distance ? b : a, allNEOs[0]);
+
+    document.getElementById('kpi-total').textContent = total;
+    document.getElementById('kpi-hazardous').textContent = hazCount;
+    document.getElementById('kpi-largest').textContent = largest?.diameterMax.toFixed(3) + ' km';
+    document.getElementById('kpi-largest-name').textContent = largest?.name;
+    document.getElementById('kpi-fastest').textContent = fastest?.velocity + ' km/s';
+    document.getElementById('kpi-fastest-name').textContent = fastest?.name;
+    document.getElementById('kpi-closest').textContent = closest?.distance + ' LD';
+    document.getElementById('kpi-closest-name').textContent = closest?.name;
+  }
+
+  function updateMap() {
+    if (!map || !markersLayer) return;
+    markersLayer.clearLayers();
+
+    const maxDiam = Math.max(...allNEOs.map(n => n.diameterMax));
+    const minDiam = Math.min(...allNEOs.map(n => n.diameterMax));
+    const diamRange = maxDiam - minDiam || 1;
+
+    allNEOs.forEach(neo => {
+      const lat = (Math.random() * 140) - 70;
+      const lng = (Math.random() * 360) - 180;
+      const normalizedSize = ((neo.diameterMax - minDiam) / diamRange);
+      const radius = 6 + normalizedSize * 20;
+      const color = neo.hazardous ? '#ef4444' : '#3b82f6';
+
+      const marker = L.circleMarker([lat, lng], {
+        radius,
+        fillColor: color,
+        color: neo.hazardous ? '#ff6b6b' : '#60a5fa',
+        weight: 1.5,
+        opacity: 0.9,
+        fillOpacity: 0.6
+      });
+
+      marker.bindPopup(`
+        <div style="font-family:'Segoe UI',sans-serif; min-width:200px;">
+          <div style="font-weight:700; font-size:1rem; margin-bottom:6px;">☄️ ${neo.name}</div>
+          <div style="font-size:0.82rem; color:#555; margin-bottom:8px;">Close Approach: ${neo.date}</div>
+          <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+            <tr><td style="color:#888; padding:2px 0;">Est. Diameter</td><td style="text-align:right; font-weight:600;">${neo.diameter} km</td></tr>
+            <tr><td style="color:#888; padding:2px 0;">Velocity</td><td style="text-align:right; font-weight:600;">${neo.velocity} km/s</td></tr>
+            <tr><td style="color:#888; padding:2px 0;">Miss Distance</td><td style="text-align:right; font-weight:600;">${neo.distance} LD</td></tr>
+            <tr><td style="color:#888; padding:2px 0;">Hazardous</td><td style="text-align:right; font-weight:600; color:${neo.hazardous ? '#ef4444' : '#10b981'}">${neo.hazardous ? '⚠️ Yes' : '✅ No'}</td></tr>
+          </table>
+          <div style="margin-top:8px; font-size:0.72rem; color:#999; font-style:italic;">Map position is illustrative only — not a predicted impact location.</div>
+        </div>
+      `);
+
+      markersLayer.addLayer(marker);
+    });
+  }
+
+  function updateCharts() {
+    const top10Diam = [...allNEOs].sort((a, b) => b.diameterMax - a.diameterMax).slice(0, 10);
+    const top10Dist = [...allNEOs].sort((a, b) => a.distance - b.distance).slice(0, 10);
+    const top10Vel = [...allNEOs].sort((a, b) => b.velocity - a.velocity).slice(0, 10);
+
+    const chartDefaults = {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e2d45' } },
+        y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e2d45' } }
+      }
+    };
+
+    buildChart('chart-diameter', 'bar', top10Diam.map(n => n.name), top10Diam.map(n => n.diameterMax),
+      top10Diam.map(n => n.hazardous ? '#ef4444' : '#3b82f6'), chartDefaults);
+
+    buildChart('chart-distance', 'bar', top10Dist.map(n => n.name), top10Dist.map(n => n.distance),
+      top10Dist.map(n => n.hazardous ? '#ef4444' : '#3b82f6'), chartDefaults);
+
+    buildChart('chart-velocity', 'bar', top10Vel.map(n => n.name), top10Vel.map(n => n.velocity),
+      top10Vel.map(n => n.hazardous ? '#ef4444' : '#3b82f6'), chartDefaults);
+  }
+
+  function buildChart(id, type, labels, data, colors, options) {
+    if (charts[id]) charts[id].destroy();
+    const ctx = document.getElementById(id).getContext('2d');
+    charts[id] = new Chart(ctx, {
+      type,
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] },
+      options: { responsive: true, maintainAspectRatio: false, ...options }
+    });
+  }
+
+  function renderTable() {
+    const search = document.getElementById('search-input').value.toLowerCase();
+    let filtered = allNEOs.filter(n => {
+      const matchSearch = n.name.toLowerCase().includes(search);
+      const matchHazard = showHazardousOnly ? n.hazardous : true;
+      return matchSearch && matchHazard;
+    });
+
+    filtered.sort((a, b) => {
+      const av = a[sortKey], bv = b[sortKey];
+      if (typeof av === 'string') return av.localeCompare(bv) * sortDir;
+      return (av - bv) * sortDir;
+    });
+
+    const tbody = document.getElementById('neo-tbody');
+    tbody.innerHTML = filtered.map(n => `
+      <tr>
+        <td>${n.name}</td>
+        <td>${n.date}</td>
+        <td>${n.diameter}</td>
+        <td>${n.velocity}</td>
+        <td>${n.distance}</td>
+        <td><span class="badge ${n.hazardous ? 'hazardous' : 'safe'}">${n.hazardous ? '⚠️ Yes' : '✅ No'}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  function sortTable(key) {
+    if (sortKey === key) sortDir *= -1;
+    else { sortKey = key; sortDir = 1; }
+    document.querySelectorAll('thead th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+    const idx = ['name','date','diameter','velocity','distance','hazardous'].indexOf(key);
+    const th = document.querySelectorAll('thead th')[idx];
+    th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    renderTable();
+  }
+
+  function toggleHazard() {
+    showHazardousOnly = !showHazardousOnly;
+    document.getElementById('hazard-toggle').textContent = showHazardousOnly ? 'Show All' : 'Show Hazardous Only';
+    renderTable();
+  }
+
+  function showError(msg) {
+    const banner = document.getElementById('error-banner');
+    banner.textContent = '⚠️ ' + msg;
+    banner.style.display = 'block';
+  }
+
+  document.getElementById('api-key-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') startDashboard();
+  });
+</script>
+</body>
+</html>
